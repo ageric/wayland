@@ -38,6 +38,12 @@
 #include "wayland-server-protocol.h"
 #include "connection.h"
 
+struct wl_socket {
+	int fd;
+	struct sockaddr_un addr;
+	struct wl_list link;
+};
+
 struct wl_client {
 	struct wl_connection *connection;
 	struct wl_event_source *source;
@@ -47,15 +53,17 @@ struct wl_client {
 };
 
 struct wl_display {
-	struct wl_object base;
+	struct wl_object object;
 	struct wl_event_loop *loop;
 	struct wl_hash_table *objects;
+	int run;
 
 	struct wl_list frame_list;
 	uint32_t client_id_range;
 	uint32_t id;
 
 	struct wl_list global_list;
+	struct wl_list socket_list;
 };
 
 struct wl_frame_listener {
@@ -134,7 +142,7 @@ wl_client_connection_data(int fd, uint32_t mask, void *data)
 
 		object = wl_hash_table_lookup(client->display->objects, p[0]);
 		if (object == NULL) {
-			wl_client_post_event(client, &client->display->base,
+			wl_client_post_event(client, &client->display->object,
 					     WL_DISPLAY_INVALID_OBJECT, p[0]);
 			wl_connection_consume(connection, size);
 			len -= size;
@@ -142,7 +150,7 @@ wl_client_connection_data(int fd, uint32_t mask, void *data)
 		}
 
 		if (opcode >= object->interface->method_count) {
-			wl_client_post_event(client, &client->display->base,
+			wl_client_post_event(client, &client->display->object,
 					     WL_DISPLAY_INVALID_METHOD, p[0], opcode);
 			wl_connection_consume(connection, size);
 			len -= size;
@@ -156,7 +164,7 @@ wl_client_connection_data(int fd, uint32_t mask, void *data)
 		len -= size;
 
 		if (closure == NULL && errno == EINVAL) {
-			wl_client_post_event(client, &client->display->base,
+			wl_client_post_event(client, &client->display->object,
 					     WL_DISPLAY_INVALID_METHOD,
 					     p[0], opcode);
 			continue;
@@ -200,7 +208,7 @@ wl_client_get_display(struct wl_client *client)
 static void
 wl_display_post_range(struct wl_display *display, struct wl_client *client)
 {
-	wl_client_post_event(client, &client->display->base,
+	wl_client_post_event(client, &client->display->object,
 			     WL_DISPLAY_RANGE, display->client_id_range);
 	display->client_id_range += 256;
 	client->id_count += 256;
@@ -229,7 +237,7 @@ wl_client_create(struct wl_display *display, int fd)
 	wl_display_post_range(display, client);
 
 	wl_list_for_each(global, &display->global_list, link)
-		wl_client_post_event(client, &client->display->base,
+		wl_client_post_event(client, &client->display->object,
 				     WL_DISPLAY_GLOBAL,
 				     global->object,
 				     global->object->interface->name,
@@ -252,7 +260,7 @@ wl_client_add_resource(struct wl_client *client,
 		wl_display_post_range(display, client);
 
 	wl_hash_table_insert(client->display->objects,
-			     resource->base.id, resource);
+			     resource->object.id, resource);
 	wl_list_insert(client->resource_list.prev, &resource->link);
 }
 
@@ -260,7 +268,7 @@ WL_EXPORT void
 wl_client_post_no_memory(struct wl_client *client)
 {
 	wl_client_post_event(client,
-			     &client->display->base,
+			     &client->display->object,
 			     WL_DISPLAY_NO_MEMORY);
 }
 
@@ -268,7 +276,7 @@ WL_EXPORT void
 wl_client_post_global(struct wl_client *client, struct wl_object *object)
 {
 	wl_client_post_event(client,
-			     &client->display->base,
+			     &client->display->object,
 			     WL_DISPLAY_GLOBAL,
 			     object,
 			     object->interface->name,
@@ -281,8 +289,8 @@ wl_resource_destroy(struct wl_resource *resource, struct wl_client *client)
 	struct wl_display *display = client->display;
 
 	wl_list_remove(&resource->link);
-	if (resource->base.id > 0)
-		wl_hash_table_remove(display->objects, resource->base.id);
+	if (resource->object.id > 0)
+		wl_hash_table_remove(display->objects, resource->object.id);
 	resource->destroy(resource, client);
 }
 
@@ -301,11 +309,62 @@ wl_client_destroy(struct wl_client *client)
 	free(client);
 }
 
+WL_EXPORT void
+wl_input_device_set_pointer_focus(struct wl_input_device *device,
+				  struct wl_surface *surface,
+				  uint32_t time,
+				  int32_t x, int32_t y,
+				  int32_t sx, int32_t sy)
+{
+	if (device->pointer_focus == surface)
+		return;
+
+	if (device->pointer_focus &&
+	    (!surface || device->pointer_focus->client != surface->client))
+		wl_client_post_event(device->pointer_focus->client,
+				     &device->object,
+				     WL_INPUT_DEVICE_POINTER_FOCUS,
+				     time, NULL, 0, 0, 0, 0);
+	if (surface)
+		wl_client_post_event(surface->client,
+				     &device->object,
+				     WL_INPUT_DEVICE_POINTER_FOCUS,
+				     time, surface, x, y, sx, sy);
+
+	device->pointer_focus = surface;
+	device->pointer_focus_time = time;
+}
+
+WL_EXPORT void
+wl_input_device_set_keyboard_focus(struct wl_input_device *device,
+				   struct wl_surface *surface,
+				   uint32_t time)
+{
+	if (device->keyboard_focus == surface)
+		return;
+
+	if (device->keyboard_focus &&
+	    (!surface || device->keyboard_focus->client != surface->client))
+		wl_client_post_event(device->keyboard_focus->client,
+				     &device->object,
+				     WL_INPUT_DEVICE_KEYBOARD_FOCUS,
+				     time, NULL, &device->keys);
+
+	if (surface)
+		wl_client_post_event(surface->client,
+				     &device->object,
+				     WL_INPUT_DEVICE_KEYBOARD_FOCUS,
+				     time, surface, &device->keys);
+
+	device->keyboard_focus = surface;
+	device->keyboard_focus_time = time;
+}
+
 static void
 display_sync(struct wl_client *client,
 	       struct wl_display *display, uint32_t key)
 {
-	wl_client_post_event(client, &display->base, WL_DISPLAY_KEY, key, 0);
+	wl_client_post_event(client, &display->object, WL_DISPLAY_KEY, key, 0);
 }
 
 static void
@@ -333,7 +392,7 @@ display_frame(struct wl_client *client,
 	/* The listener is a resource so we destroy it when the client
 	 * goes away. */
 	listener->resource.destroy = destroy_frame_listener;
-	listener->resource.base.id = 0;
+	listener->resource.object.id = 0;
 	listener->client = client;
 	listener->key = key;
 	wl_list_insert(client->resource_list.prev, &listener->resource.link);
@@ -374,20 +433,38 @@ wl_display_create(void)
 
 	wl_list_init(&display->frame_list);
 	wl_list_init(&display->global_list);
+	wl_list_init(&display->socket_list);
 
 	display->client_id_range = 256; /* Gah, arbitrary... */
 
 	display->id = 1;
-	display->base.interface = &wl_display_interface;
-	display->base.implementation = (void (**)(void)) &display_interface;
-	wl_display_add_object(display, &display->base);
-	if (wl_display_add_global(display, &display->base, NULL)) {
+	display->object.interface = &wl_display_interface;
+	display->object.implementation = (void (**)(void)) &display_interface;
+	wl_display_add_object(display, &display->object);
+	if (wl_display_add_global(display, &display->object, NULL)) {
 		wl_event_loop_destroy(display->loop);
 		free(display);
 		return NULL;
 	}
 
 	return display;
+}
+
+WL_EXPORT void
+wl_display_destroy(struct wl_display *display)
+{
+	struct wl_socket *s, *next;
+
+	wl_event_loop_destroy(display->loop);
+	wl_hash_table_destroy(display->objects);
+	
+	wl_list_for_each_safe(s, next, &display->socket_list, link) {
+		close(s->fd);
+		unlink(s->addr.sun_path);
+		free(s);
+	}
+
+	free(display);
 }
 
 WL_EXPORT void
@@ -420,7 +497,7 @@ wl_display_post_frame(struct wl_display *display, uint32_t time)
 	struct wl_frame_listener *listener, *next;
 
 	wl_list_for_each_safe(listener, next, &display->frame_list, link) {
-		wl_client_post_event(listener->client, &display->base,
+		wl_client_post_event(listener->client, &display->object,
 				     WL_DISPLAY_KEY, listener->key, time);
 		wl_resource_destroy(&listener->resource, listener->client);
 	}
@@ -433,9 +510,17 @@ wl_display_get_event_loop(struct wl_display *display)
 }
 
 WL_EXPORT void
+wl_display_terminate(struct wl_display *display)
+{
+	display->run = 0;
+}
+
+WL_EXPORT void
 wl_display_run(struct wl_display *display)
 {
-	while (1)
+	display->run = 1;
+
+	while (display->run)
 		wl_event_loop_dispatch(display->loop, -1);
 }
 
@@ -456,30 +541,50 @@ socket_data(int fd, uint32_t mask, void *data)
 }
 
 WL_EXPORT int
-wl_display_add_socket(struct wl_display *display,
-		      const char *name, size_t name_size)
+wl_display_add_socket(struct wl_display *display, const char *name)
 {
-	struct sockaddr_un addr;
-	int sock;
-	socklen_t size;
+	struct wl_socket *s;
+	socklen_t size, name_size;
+	const char *runtime_dir;
 
-	sock = socket(PF_LOCAL, SOCK_STREAM, 0);
-	if (sock < 0)
+	s = malloc(sizeof *s);
+	if (socket == NULL)
 		return -1;
 
-	addr.sun_family = AF_LOCAL;
-	memcpy(addr.sun_path, name, name_size);
+	s->fd = socket(PF_LOCAL, SOCK_STREAM, 0);
+	if (s->fd < 0)
+		return -1;
+
+	runtime_dir = getenv("XDG_RUNTIME_DIR");
+	if (runtime_dir == NULL) {
+		runtime_dir = ".";
+		fprintf(stderr,
+			"XDG_RUNTIME_DIR not set, falling back to %s\n",
+			runtime_dir);
+	}
+
+	if (name == NULL)
+		name = getenv("WAYLAND_DISPLAY");
+	if (name == NULL)
+		name = "wayland-0";
+
+	memset(&s->addr, 0, sizeof s->addr);
+	s->addr.sun_family = AF_LOCAL;
+	name_size = snprintf(s->addr.sun_path, sizeof s->addr.sun_path,
+			     "%s/%s", runtime_dir, name) + 1;
+	fprintf(stderr, "using socket %s\n", s->addr.sun_path);
 
 	size = offsetof (struct sockaddr_un, sun_path) + name_size;
-	if (bind(sock, (struct sockaddr *) &addr, size) < 0)
+	if (bind(s->fd, (struct sockaddr *) &s->addr, size) < 0)
 		return -1;
 
-	if (listen(sock, 1) < 0)
+	if (listen(s->fd, 1) < 0)
 		return -1;
 
-	wl_event_loop_add_fd(display->loop, sock,
+	wl_event_loop_add_fd(display->loop, s->fd,
 			     WL_EVENT_READABLE,
 			     socket_data, display);
+	wl_list_insert(display->socket_list.prev, &s->link);
 
 	return 0;
 }

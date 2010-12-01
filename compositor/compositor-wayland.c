@@ -507,14 +507,18 @@ wayland_compositor_handle_event(int fd, uint32_t mask, void *data)
 		wl_display_iterate(c->parent.display, WL_DISPLAY_WRITABLE);
 }
 
+static void
+wayland_destroy(struct wlsc_compositor *ec)
+{
+	free(ec);
+}
+
 struct wlsc_compositor *
 wayland_compositor_create(struct wl_display *display, int width, int height)
 {
 	struct wayland_compositor *c;
 	struct wl_event_loop *loop;
 	int fd;
-	char *socket_name;
-	int socket_name_size;
 
 	c = malloc(sizeof *c);
 	if (c == NULL)
@@ -522,11 +526,7 @@ wayland_compositor_create(struct wl_display *display, int width, int height)
 
 	memset(c, 0, sizeof *c);
 
-	socket_name_size = 1 + asprintf(&socket_name, "%c%s", '\0',
-					getenv("WAYLAND_DISPLAY"));
-
-	c->parent.display = wl_display_connect(socket_name, socket_name_size);
-	free(socket_name);
+	c->parent.display = wl_display_connect(NULL);
 
 	if (c->parent.display == NULL) {
 		fprintf(stderr, "failed to create display: %m\n");
@@ -562,6 +562,7 @@ wayland_compositor_create(struct wl_display *display, int width, int height)
 	if (c->parent.wl_source == NULL)
 		return NULL;
 
+	c->base.destroy = wayland_destroy;
 	c->base.authenticate = wayland_authenticate;
 	c->base.present = wayland_compositor_present;
 

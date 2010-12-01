@@ -81,8 +81,10 @@ struct wl_display;
 struct wl_input_device;
 
 struct wl_display *wl_display_create(void);
+void wl_display_destroy(struct wl_display *display);
 struct wl_event_loop *wl_display_get_event_loop(struct wl_display *display);
-int wl_display_add_socket(struct wl_display *display, const char *name, size_t name_size);
+int wl_display_add_socket(struct wl_display *display, const char *name);
+void wl_display_terminate(struct wl_display *display);
 void wl_display_run(struct wl_display *display);
 
 void wl_display_add_object(struct wl_display *display, struct wl_object *object);
@@ -96,18 +98,18 @@ void wl_client_post_no_memory(struct wl_client *client);
 void wl_client_post_global(struct wl_client *client, struct wl_object *object);
 
 struct wl_compositor {
-	struct wl_object base;
+	struct wl_object object;
 };
 
 struct wl_resource {
-	struct wl_object base;
+	struct wl_object object;
 	void (*destroy)(struct wl_resource *resource,
 			struct wl_client *client);
 	struct wl_list link;
 };
 
 struct wl_buffer {
-	struct wl_resource base;
+	struct wl_resource resource;
 	struct wl_compositor *compositor;
 	struct wl_visual *visual;
 	int32_t width, height;
@@ -118,24 +120,29 @@ struct wl_buffer {
 };
 
 struct wl_surface {
-	struct wl_resource base;
+	struct wl_resource resource;
 	struct wl_client *client;
 };
 
 struct wl_shell {
-	struct wl_object base;
+	struct wl_object object;
 };
 
 struct wl_input_device {
-	struct wl_object base;
+	struct wl_object object;
+	struct wl_surface *pointer_focus;
+	struct wl_surface *keyboard_focus;
+	struct wl_array keys;
+	uint32_t pointer_focus_time;
+	uint32_t keyboard_focus_time;
 };
 
 struct wl_visual {
-	struct wl_object base;
+	struct wl_object object;
 };
 
 struct wl_drag_offer {
-	struct wl_object base;
+	struct wl_object object;
 };
 
 struct wl_drag {
@@ -173,6 +180,19 @@ wl_client_get_display(struct wl_client *client);
 
 void
 wl_resource_destroy(struct wl_resource *resource, struct wl_client *client);
+
+void
+wl_input_device_set_pointer_focus(struct wl_input_device *device,
+				  struct wl_surface *surface,
+				  uint32_t time,
+				  int32_t x, int32_t y,
+				  int32_t sx, int32_t sy);
+
+void
+wl_input_device_set_keyboard_focus(struct wl_input_device *device,
+				   struct wl_surface *surface,
+				   uint32_t time);
+
 
 #ifdef  __cplusplus
 }

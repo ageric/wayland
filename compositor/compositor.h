@@ -48,7 +48,7 @@ struct wlsc_listener {
 };
 
 struct wlsc_output {
-	struct wl_object base;
+	struct wl_object object;
 	struct wl_list link;
 	struct wlsc_compositor *compositor;
 	struct wlsc_surface *background;
@@ -88,18 +88,14 @@ enum wlsc_pointer_type {
 };
 
 struct wlsc_input_device {
-	struct wl_input_device base;
+	struct wl_input_device input_device;
 	int32_t x, y;
 	struct wlsc_compositor *ec;
 	struct wlsc_surface *sprite;
 	int32_t hotspot_x, hotspot_y;
 	struct wl_list link;
 
-	struct wlsc_surface *pointer_focus;
-	struct wlsc_surface *keyboard_focus;
-	struct wl_array keys;
 	uint32_t modifier_state;
-	uint32_t pointer_focus_time;
 
 	enum wlsc_grab_type grab;
 	struct wlsc_surface *grab_surface;
@@ -114,28 +110,28 @@ struct wlsc_input_device {
 };
 
 struct wlsc_drm {
-	struct wl_object base;
+	struct wl_object object;
 	int fd;
 	char *filename;
 };
 
 struct wlsc_drm_buffer {
-	struct wl_buffer base;
+	struct wl_buffer buffer;
 	EGLImageKHR image;
 };
 
 struct wlsc_shm {
-	struct wl_object base;
+	struct wl_object object;
 };
 
 struct wlsc_shm_buffer {
-	struct wl_buffer base;
+	struct wl_buffer buffer;
 	int32_t stride;
 	void *data;
 };
 
 struct wlsc_compositor {
-	struct wl_compositor base;
+	struct wl_compositor compositor;
 	struct wl_visual argb_visual, premultiplied_argb_visual, rgb_visual;
 
 	struct wlsc_drm drm;
@@ -167,6 +163,7 @@ struct wlsc_compositor {
 
 	uint32_t focus;
 
+	void (*destroy)(struct wlsc_compositor *ec);
 	int (*authenticate)(struct wlsc_compositor *c, uint32_t id);
 	void (*present)(struct wlsc_compositor *c);
 };
@@ -180,7 +177,7 @@ struct wlsc_vector {
 };
 
 struct wlsc_surface {
-	struct wl_surface base;
+	struct wl_surface surface;
 	struct wlsc_compositor *compositor;
 	GLuint texture;
 	int32_t x, y, width, height;
