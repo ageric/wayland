@@ -23,6 +23,9 @@
 #ifndef _WINDOW_H_
 #define _WINDOW_H_
 
+#include <glib.h>
+#include <wayland-client.h>
+
 struct window;
 
 struct rectangle {
@@ -158,6 +161,9 @@ void
 window_flush(struct window *window);
 
 void
+window_set_surface(struct window *window, cairo_surface_t *surface);
+
+void
 window_create_surface(struct window *window);
 
 enum window_buffer_type {
@@ -216,9 +222,11 @@ display_set_drag_offer_handler(struct display *display,
 			       display_drag_offer_handler_t handler);
 
 struct wl_drag *
-window_start_drag(struct window *window, struct input *input, uint32_t time,
-		  const struct wl_drag_listener *listener, void *data);
+window_create_drag(struct window *window);
 
+void
+window_activate_drag(struct wl_drag *drag, struct window *window,
+		     struct input *input, uint32_t time);
 
 void
 input_get_position(struct input *input, int32_t *x, int32_t *y);

@@ -161,6 +161,9 @@ struct surface_data {
 	struct wl_buffer *buffer;
 };
 
+#define MULT(_d,c,a,t) \
+	do { t = c * a + 0x7f; _d = ((t >> 8) + t) >> 8; } while (0)
+
 #ifdef HAVE_CAIRO_GL
 
 struct drm_surface_data {
@@ -195,7 +198,7 @@ display_get_image_for_drm_surface(struct display *display,
 	return data->image;
 }
 
-cairo_surface_t *
+static cairo_surface_t *
 display_create_drm_surface(struct display *display,
 			   struct rectangle *rectangle)
 {
@@ -203,7 +206,6 @@ display_create_drm_surface(struct display *display,
 	EGLDisplay dpy = display->dpy;
 	cairo_surface_t *surface;
 	struct wl_visual *visual;
-	struct wl_buffer *buffer;
 	EGLint name, stride;
 
 	EGLint image_attribs[] = {
@@ -249,7 +251,7 @@ display_create_drm_surface(struct display *display,
 	return surface;
 }
 
-cairo_surface_t *
+static cairo_surface_t *
 display_create_drm_surface_from_file(struct display *display,
 				     const char *filename,
 				     struct rectangle *rect)
@@ -282,9 +284,6 @@ display_create_drm_surface_from_file(struct display *display,
 		end = p + rect->width * 4;
 		while (p < end) {
 			unsigned int t;
-
-#define MULT(_d,c,a,t) \
-	do { t = c * a + 0x7f; _d = ((t >> 8) + t) >> 8; } while (0)
 
 			MULT(p[0], p[0], p[3], t);
 			MULT(p[1], p[1], p[3], t);
@@ -327,7 +326,7 @@ struct shm_surface_data {
 	size_t length;
 };
 
-void
+static void
 shm_surface_data_destroy(void *p)
 {
 	struct shm_surface_data *data = p;
@@ -336,14 +335,14 @@ shm_surface_data_destroy(void *p)
 	munmap(data->map, data->length);
 }
 
-cairo_surface_t *
+static cairo_surface_t *
 display_create_shm_surface(struct display *display,
 			   struct rectangle *rectangle)
 {
 	struct shm_surface_data *data;
 	cairo_surface_t *surface;
 	struct wl_visual *visual;
-	int stride, alloc, fd;
+	int stride, fd;
 	char filename[] = "/tmp/wayland-shm-XXXXXX";
 
 	data = malloc(sizeof *data);
@@ -395,7 +394,7 @@ display_create_shm_surface(struct display *display,
 	return surface;
 }
 
-cairo_surface_t *
+static cairo_surface_t *
 display_create_shm_surface_from_file(struct display *display,
 				     const char *filename,
 				     struct rectangle *rect)
@@ -454,21 +453,21 @@ display_create_surface(struct display *display,
 		       struct rectangle *rectangle)
 {
 #ifdef HAVE_CAIRO_GL
-	display_create_drm_surface(display, rectangle);
+	return display_create_drm_surface(display, rectangle);
 #else
-	display_create_shm_surface(display, rectangle);
+	return display_create_shm_surface(display, rectangle);
 #endif
 }
 
-cairo_surface_t *
+static cairo_surface_t *
 display_create_surface_from_file(struct display *display,
 				 const char *filename,
 				 struct rectangle *rectangle)
 {
 #ifdef HAVE_CAIRO_GL
-	display_create_drm_surface_from_file(display, filename, rectangle);
+	return display_create_drm_surface_from_file(display, filename, rectangle);
 #else
-	display_create_shm_surface_from_file(display, filename, rectangle);
+	return display_create_shm_surface_from_file(display, filename, rectangle);
 #endif
 }
 
@@ -600,6 +599,9 @@ window_create_surface(struct window *window)
 	case WINDOW_BUFFER_TYPE_SHM:
 		surface = display_create_shm_surface(window->display,
 						     &window->allocation);
+		break;
+        default:
+		surface = NULL;
 		break;
 	}
 
@@ -986,20 +988,18 @@ input_get_input_device(struct input *input)
 }
 
 struct wl_drag *
-window_start_drag(struct window *window, struct input *input, uint32_t time,
-		  const struct wl_drag_listener *listener, void *data)
+window_create_drag(struct window *window)
 {
-	struct wl_drag *drag;
-
 	cairo_device_flush (window->display->device);
 
-	drag = wl_shell_create_drag(window->display->shell);
-	wl_drag_offer(drag, "text/plain");
-	wl_drag_offer(drag, "text/html");
-	wl_drag_activate(drag, window->surface, input->input_device, time);
-	wl_drag_add_listener(drag, listener, data);
+	return wl_shell_create_drag(window->display->shell);
+}
 
-	return drag;
+void
+window_activate_drag(struct wl_drag *drag, struct window *window,
+		     struct input *input, uint32_t time)
+{
+	wl_drag_activate(drag, window->surface, input->input_device, time);
 }
 
 static void
@@ -1016,14 +1016,16 @@ handle_configure(void *data, struct wl_shell *shell,
 	window->pending_allocation.width = width;
 	window->pending_allocation.height = height;
 
-	if (!(edges & 15))
-		return;
-
-	if (window->resize_handler)
-		(*window->resize_handler)(window,
-					  window->user_data);
-	else if (window->redraw_handler)
-		window_schedule_redraw(window);
+	if (edges & WINDOW_TITLEBAR) {
+		window->allocation.x = window->pending_allocation.x;
+		window->allocation.y = window->pending_allocation.y;
+	} else if (edges & WINDOW_RESIZING_MASK) {
+		if (window->resize_handler)
+			(*window->resize_handler)(window,
+						  window->user_data);
+		else if (window->redraw_handler)
+			window_schedule_redraw(window);
+	}
 }
 
 static const struct wl_shell_listener shell_listener = {
@@ -1328,8 +1330,10 @@ display_handle_global(struct wl_display *display, uint32_t id,
 	} else if (strcmp(interface, "shm") == 0) {
 		d->shm = wl_shm_create(display, id);
 	} else if (strcmp(interface, "drag_offer") == 0) {
-		offer = wl_drag_offer_create(display, id);
-		d->drag_offer_handler(offer, d);
+		if (d->drag_offer_handler) {
+			offer = wl_drag_offer_create(display, id);
+			d->drag_offer_handler(offer, d);
+		}
 	}
 }
 
@@ -1421,7 +1425,7 @@ display_create(int *argc, char **argv[], const GOptionEntry *option_entries)
 	if (d == NULL)
 		return NULL;
 
-	d->display = wl_display_create(socket_name, sizeof socket_name);
+	d->display = wl_display_connect(socket_name, sizeof socket_name);
 	if (d->display == NULL) {
 		fprintf(stderr, "failed to create display: %m\n");
 		return NULL;
@@ -1459,7 +1463,10 @@ display_create(int *argc, char **argv[], const GOptionEntry *option_entries)
 		return NULL;
 	}
 
-	eglBindAPI(EGL_OPENGL_API);
+	if (!eglBindAPI(EGL_OPENGL_API)) {
+		fprintf(stderr, "failed to bind api EGL_OPENGL_API\n");
+		return NULL;
+	}
 
 	d->ctx = eglCreateContext(d->dpy, NULL, EGL_NO_CONTEXT, NULL);
 	if (d->ctx == NULL) {

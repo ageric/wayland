@@ -80,19 +80,21 @@ struct x11_input {
 };
 
 
-static void
+static int
 x11_input_create(struct x11_compositor *c)
 {
 	struct x11_input *input;
 
 	input = malloc(sizeof *input);
 	if (input == NULL)
-		return;
+		return -1;
 
 	memset(input, 0, sizeof *input);
 	wlsc_input_device_init(&input->base, &c->base);
 
 	c->base.input_device = &input->base;
+
+	return 0;
 }
 
 
@@ -140,7 +142,7 @@ dri2_connect(struct x11_compositor *c)
 		xcb_dri2_query_version_reply (c->conn,
 					      dri2_query_cookie, &error);
 	if (dri2_query == NULL || error != NULL) {
-		fprintf(stderr, "DRI2: failed to query version");
+		fprintf(stderr, "DRI2: failed to query version\n");
 		free(error);
 		return EGL_FALSE;
 	}
@@ -152,7 +154,8 @@ dri2_connect(struct x11_compositor *c)
 					  connect_cookie, NULL);
 	if (connect == NULL ||
 	    connect->driver_name_length + connect->device_name_length == 0) {
-		fprintf(stderr, "DRI2: failed to authenticate");
+		fprintf(stderr, "DRI2: failed to connect, DRI2 version: %u.%u\n",
+			c->dri2_major, c->dri2_minor);
 		return -1;
 	}
 
@@ -177,7 +180,7 @@ dri2_connect(struct x11_compositor *c)
 	fd = open(path, O_RDWR);
 	if (fd < 0) {
 		fprintf(stderr,
-			"DRI2: could not open %s (%s)", path, strerror(errno));
+			"DRI2: could not open %s (%s)\n", path, strerror(errno));
 		return -1;
 	}
 
@@ -197,7 +200,7 @@ dri2_authenticate(struct x11_compositor *c, uint32_t magic)
 		xcb_dri2_authenticate_reply(c->conn,
 					    authenticate_cookie, NULL);
 	if (authenticate == NULL || !authenticate->authenticated) {
-		fprintf(stderr, "DRI2: failed to authenticate");
+		fprintf(stderr, "DRI2: failed to authenticate\n");
 		free(authenticate);
 		return -1;
 	}
@@ -222,7 +225,7 @@ x11_compositor_init_egl(struct x11_compositor *c)
 		return -1;
 
 	if (drmGetMagic(c->base.drm.fd, &magic)) {
-		fprintf(stderr, "DRI2: failed to get drm magic");
+		fprintf(stderr, "DRI2: failed to get drm magic\n");
 		return -1;
 	}
 
@@ -246,7 +249,11 @@ x11_compositor_init_egl(struct x11_compositor *c)
 		return -1;
 	}
 
-	eglBindAPI(EGL_OPENGL_ES_API);
+	if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+		fprintf(stderr, "failed to bind EGL_OPENGL_ES_API\n");
+		return -1;
+	}
+
 	c->base.context = eglCreateContext(c->base.display, NULL,
 					   EGL_NO_CONTEXT, context_attribs);
 	if (c->base.context == NULL) {
@@ -659,15 +666,18 @@ x11_compositor_create(struct wl_display *display, int width, int height)
 	x11_compositor_get_resources(c);
 
 	c->base.wl_display = display;
-	x11_compositor_init_egl(c);
+	if (x11_compositor_init_egl(c) < 0)
+		return NULL;
 
 	/* Can't init base class until we have a current egl context */
 	if (wlsc_compositor_init(&c->base, display) < 0)
 		return NULL;
 
-	x11_compositor_create_output(c, width, height);
+	if (x11_compositor_create_output(c, width, height) < 0)
+		return NULL;
 
-	x11_input_create(c);
+	if (x11_input_create(c) < 0)
+		return NULL;
 
 	loop = wl_display_get_event_loop(c->base.wl_display);
 
