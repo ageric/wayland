@@ -20,6 +20,9 @@
  * OF THIS SOFTWARE.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 #include <stddef.h>
 #include <stdio.h>
 #include <errno.h>
@@ -29,8 +32,12 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/epoll.h>
+#ifdef HAVE_SYS_SIGNALFD_H
 #include <sys/signalfd.h>
+#endif // HAVE_SYS_SIGNALFD_H
+#ifdef HAVE_SYS_TIMERFD_H
 #include <sys/timerfd.h>
+#endif // HAVE_SYS_TIMERFD_H
 #include <unistd.h>
 #include <assert.h>
 #include "wayland-server.h"
@@ -190,6 +197,7 @@ wl_event_loop_add_timer(struct wl_event_loop *loop,
 			wl_event_loop_timer_func_t func,
 			void *data)
 {
+#ifdef HAVE_SYS_TIMERFD_H
 	struct wl_event_source_timer *source;
 	struct epoll_event ep;
 
@@ -220,11 +228,15 @@ wl_event_loop_add_timer(struct wl_event_loop *loop,
 	}
 
 	return &source->base;
+#else // HAVE_SYS_TIMERFD_H
+	return NULL;
+#endif // HAVE_SYS_TIMERFD_H
 }
 
 WL_EXPORT int
 wl_event_source_timer_update(struct wl_event_source *source, int ms_delay)
 {
+#ifdef HAVE_SYS_TIMERFD_H
 	struct wl_event_source_timer *timer_source =
 		(struct wl_event_source_timer *) source;
 	struct itimerspec its;
@@ -237,7 +249,7 @@ wl_event_source_timer_update(struct wl_event_source *source, int ms_delay)
 		fprintf(stderr, "could not set timerfd\n: %m");
 		return -1;
 	}
-
+#endif // HAVE_SYS_TIMERFD_H
 	return 0;
 }
 
@@ -253,6 +265,7 @@ static void
 wl_event_source_signal_dispatch(struct wl_event_source *source,
 			       struct epoll_event *ep)
 {
+#ifdef HAVE_SYS_SIGNALFD_H
 	struct wl_event_source_signal *signal_source =
 		(struct wl_event_source_signal *) source;
 	struct signalfd_siginfo signal_info;
@@ -260,6 +273,7 @@ wl_event_source_signal_dispatch(struct wl_event_source *source,
 	read(signal_source->fd, &signal_info, sizeof signal_info);
 
 	signal_source->func(signal_source->signal_number, signal_source->data);
+#endif // HAVE_SYS_SIGNALFD_H
 }
 
 static int
@@ -287,6 +301,7 @@ wl_event_loop_add_signal(struct wl_event_loop *loop,
 			wl_event_loop_signal_func_t func,
 			void *data)
 {
+#ifdef HAVE_SYS_SIGNALFD_H
 	struct wl_event_source_signal *source;
 	struct epoll_event ep;
 	sigset_t mask;
@@ -321,6 +336,9 @@ wl_event_loop_add_signal(struct wl_event_loop *loop,
 	}
 
 	return &source->base;
+#else // HAVE_SYS_SIGNALFD_H
+	return NULL;
+#endif // HAVE_SYS_SIGNALFD_H
 }
 
 struct wl_event_source_idle {

@@ -1,3 +1,4 @@
-SUBDIRS = wayland compositor clients data
+SUBDIRS = wayland data $(WAYLAND_COMPOSITOR) $(WAYLAND_CLIENTS)
+DIST_SUBDIRS = compositor clients
 
 ACLOCAL_AMFLAGS = -I m4 ${ACLOCAL_FLAGS}

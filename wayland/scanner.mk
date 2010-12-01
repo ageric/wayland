@@ -1,8 +1,8 @@
-%-protocol.c : $(top_srcdir)/protocol/%.xml
-	$(top_builddir)/wayland/scanner code < $< > $@
+%-protocol.c: $(top_srcdir)/protocol/%.xml
+	$(wayland_scanner) code < $< > $@
 
-%-server-protocol.h : $(top_srcdir)/protocol/%.xml
-	$(top_builddir)/wayland/scanner server-header < $< > $@
+%-server-protocol.h: $(top_srcdir)/protocol/%.xml
+	$(wayland_scanner) server-header < $< > $@
 
-%-client-protocol.h : $(top_srcdir)/protocol/%.xml
-	$(top_builddir)/wayland/scanner client-header < $< > $@
+%-client-protocol.h: $(top_srcdir)/protocol/%.xml
+	$(wayland_scanner) client-header < $< > $@
