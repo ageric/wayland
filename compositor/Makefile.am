@@ -1,12 +1,10 @@
 noinst_PROGRAMS = compositor
 
-INCLUDES =					\
+compositor_CPPFLAGS = 				\
+	-DDATADIR='"$(datadir)"'		\
 	-I$(top_srcdir)/wayland			\
 	-I$(top_builddir)/wayland		\
 	$(COMPOSITOR_CFLAGS)
-
-AM_CFLAGS = $(GCC_CFLAGS)
-AM_CPPFLAGS = -DDATADIR='"$(datadir)"'
 
 compositor_LDADD =					\
 	$(top_builddir)/wayland/libwayland-server.la	\
@@ -30,9 +28,9 @@ udevrulesddir = $(sysconfdir)/udev/rules.d
 dist_udevrulesd_DATA =				\
 	70-wayland.rules
 
-BUILT_SOURCES =					\
-	screenshooter-server-protocol.h		\
-	screenshooter-protocol.c
+BUILT_SOURCES =						\
+	$(srcdir)/screenshooter-server-protocol.h	\
+	$(srcdir)/screenshooter-protocol.c
 
 CLEANFILES = $(BUILT_SOURCES)
 

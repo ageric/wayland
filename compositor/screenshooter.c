@@ -16,6 +16,10 @@
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <stdlib.h>
 #include <GLES2/gl2.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>

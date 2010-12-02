@@ -1,33 +1,40 @@
-lib_LTLIBRARIES = libwayland-server.la libwayland-client.la
+lib_LTLIBRARIES = libwayland-client.la libwayland-server.la
 noinst_LTLIBRARIES = libwayland-util.la
 
 include_HEADERS =				\
-	wayland-util.h				\
-	wayland-server-protocol.h		\
-	wayland-server.h			\
+	wayland-client.h			\
 	wayland-client-protocol.h		\
-	wayland-client.h
+	wayland-server.h			\
+	wayland-server-protocol.h		\
+	wayland-util.h
 
 libwayland_util_la_CPPFLAGS = $(FFI_CFLAGS)
 libwayland_util_la_SOURCES =			\
 	connection.c				\
 	connection.h				\
+	wayland-hash.c				\
 	wayland-util.c				\
-	wayland-util.h				\
-	wayland-hash.c
+	wayland-util.h
 
 libwayland_server_la_CPPFLAGS = $(FFI_CFLAGS)
 libwayland_server_la_LIBADD = $(FFI_LIBS) libwayland-util.la
 libwayland_server_la_SOURCES =			\
+	event-loop.c				\
 	wayland-protocol.c			\
 	wayland-server.c			\
-	event-loop.c
+	wayland-server-protocol.h
 
 libwayland_client_la_CPPFLAGS = $(FFI_CFLAGS)
 libwayland_client_la_LIBADD = $(FFI_LIBS) libwayland-util.la
 libwayland_client_la_SOURCES =			\
-	wayland-protocol.c			\
-	wayland-client.c
+	wayland-client.c			\
+	wayland-client-protocol.h		\
+	wayland-protocol.c
+
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = 				\
+	wayland-client.pc 			\
+	wayland-server.pc
 
 if CROSS_COMPILING
 else
@@ -37,20 +44,15 @@ wayland_scanner_SOURCES =			\
 	scanner.c
 
 wayland_scanner_LDADD = libwayland-util.la
+
+$(BUILT_SOURCES): wayland-scanner
 endif
 
 BUILT_SOURCES =					\
-	wayland-server-protocol.h		\
-	wayland-client-protocol.h		\
-	wayland-protocol.c
-
-$(BUILT_SOURCES): $(wayland_scanner)
-
-include $(top_srcdir)/wayland/scanner.mk
-
-pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = 				\
-	wayland-client.pc 			\
-	wayland-server.pc
+	$(srcdir)/wayland-protocol.c		\
+	$(srcdir)/wayland-client-protocol.h 	\
+	$(srcdir)/wayland-server-protocol.h
 
 CLEANFILES = $(BUILT_SOURCES)
+
+include scanner.mk

@@ -20,6 +20,10 @@
  * OF THIS SOFTWARE.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <stdint.h>
 #include <glib/giochannel.h>
 #include "wayland-client.h"
