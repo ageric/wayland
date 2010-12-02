@@ -4,8 +4,7 @@
 # ----------------------------
 # Enable compiler options for gcc.
 AC_DEFUN([WAYLAND_GCC_OPTIONS],
-[
-if test "x$GCC" = "xyes"; then
+[if test "x$GCC" = "xyes"; then
     for option in "$1"; do
         case " $CFLAGS " in
         *[[\ \	]]$option[[\ \	]]*) ;;
