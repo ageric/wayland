@@ -28,6 +28,11 @@ udevrulesddir = $(sysconfdir)/udev/rules.d
 dist_udevrulesd_DATA =				\
 	70-wayland.rules
 
+if CROSS_COMPILING
+else
+$(BUILT_SOURCES): $(top_srcdir)/wayland/wayland-scanner
+endif
+
 BUILT_SOURCES =						\
 	$(srcdir)/screenshooter-server-protocol.h	\
 	$(srcdir)/screenshooter-protocol.c
