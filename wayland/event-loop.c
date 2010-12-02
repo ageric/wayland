@@ -35,10 +35,10 @@
 #include <sys/epoll.h>
 #ifdef HAVE_SYS_SIGNALFD_H
 #include <sys/signalfd.h>
-#endif // HAVE_SYS_SIGNALFD_H
+#endif /* HAVE_SYS_SIGNALFD_H */
 #ifdef HAVE_SYS_TIMERFD_H
 #include <sys/timerfd.h>
-#endif // HAVE_SYS_TIMERFD_H
+#endif /* HAVE_SYS_TIMERFD_H */
 #include <unistd.h>
 #include <assert.h>
 #include "wayland-server.h"
@@ -229,9 +229,9 @@ wl_event_loop_add_timer(struct wl_event_loop *loop,
 	}
 
 	return &source->base;
-#else // HAVE_SYS_TIMERFD_H
+#else /* HAVE_SYS_TIMERFD_H */
 	return NULL;
-#endif // HAVE_SYS_TIMERFD_H
+#endif /* HAVE_SYS_TIMERFD_H */
 }
 
 WL_EXPORT int
@@ -250,7 +250,7 @@ wl_event_source_timer_update(struct wl_event_source *source, int ms_delay)
 		fprintf(stderr, "could not set timerfd\n: %m");
 		return -1;
 	}
-#endif // HAVE_SYS_TIMERFD_H
+#endif /* HAVE_SYS_TIMERFD_H */
 	return 0;
 }
 
@@ -274,7 +274,7 @@ wl_event_source_signal_dispatch(struct wl_event_source *source,
 	read(signal_source->fd, &signal_info, sizeof signal_info);
 
 	signal_source->func(signal_source->signal_number, signal_source->data);
-#endif // HAVE_SYS_SIGNALFD_H
+#endif /* HAVE_SYS_SIGNALFD_H */
 }
 
 static int
@@ -337,9 +337,9 @@ wl_event_loop_add_signal(struct wl_event_loop *loop,
 	}
 
 	return &source->base;
-#else // HAVE_SYS_SIGNALFD_H
+#else /* HAVE_SYS_SIGNALFD_H */
 	return NULL;
-#endif // HAVE_SYS_SIGNALFD_H
+#endif /* HAVE_SYS_SIGNALFD_H */
 }
 
 struct wl_event_source_idle {
